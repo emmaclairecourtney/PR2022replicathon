@@ -33,15 +33,90 @@ You may find it helpful to use the version control and code sharing system calle
 
 Each team should answer these questions, which will help you get familiar with the available data sets.
 
+```{r}
+library(tidyverse)
+library(readr)
+
+theme_set(theme_bw())
+sum_data <- readRDS("./data/modelSummarizedPharmacoData.rds")
+raw_data <- readRDS("./data/rawPharmacoData.rds")
+model_sum_data <- readRDS ('./data/modelSummarizedPharmacoData.rds')
+
+#Summary Statistics 
+
+head(raw_data) 
+str(raw_data)
+#variables: cellLine  drug doseID concentration viability study
+
+length(unique(raw_data$cellLine)) #288 unique cell lines
+length(unique(raw_data$drug)) #15 drugs 
+
+raw_data %>%
+    summarize(nCellLines = n_distinct(cellLine),
+              nDrugs     = n_distinct(drug))
+#288 unique cell lines
+#15 drugs 
+
+#count the number of unique drug concentrations
+tapply(raw_data$concentration, raw_data$study, 
+       function(x) { length(unique(x)) })   
+print(unique(raw_data$concentration))
+
+raw_data %>%
+    group_by(study) %>%
+    summarize(n = n_distinct(concentration)) 
+#8 concentrations in CCLE, 32 concentrations in GDSC
+
+raw_data %>%
+    ggplot(aes(x = log2(concentration))) +
+    geom_histogram(fill = "gray", color = "black") +
+    facet_wrap(~ study) +
+    ggtitle("Distributions of concentrations by study")
+
+hist(raw_data$concentration)
+  
+range(raw_data$viability) # -20.0000 319.4919
+sum(raw_data$viability < 0) #23
+sum(raw_data$viability > 100) #15778
+sum(0 < raw_data$viability < 100)
+length(raw_data$viability) - 23 - 15778
+
+raw_data %>%
+    ggplot(aes(x = viability, group = study, fill = study, color = study)) +
+    geom_density(alpha = 1/4) +
+    xlim(0, 170) +
+    ggtitle("Distributions of viability scores by study")
+
+#viability = percentage of cells that survive - higher = more cells survive 
+plot(raw_data$concentration, raw_data$viability)
+concentration_viability <- lm(raw_data$viability ~ raw_data$concentration)
+summary(concentration_viability)
+#higher concentration, lower viability 
+
+```
+
+
 1. How many cell-lines are contained in the data?
+288 
 
 2. What drug concentrations were used in each study?
+[1] 2.500000e-03 8.000000e-03 2.500000e-02 8.000000e-02 2.500000e-01 8.000000e-01
+ [7] 2.530000e+00 8.000000e+00 3.906250e-03 7.812500e-03 1.562500e-02 3.125000e-02
+[13] 6.250000e-02 1.250000e-01 5.000000e-01 1.000000e+00 2.000000e+00 4.000000e+00
+[19] 9.765625e-04 1.953125e-03 3.906250e-02 7.812500e-02 1.562500e-01 3.125000e-01
+[25] 6.250000e-01 1.250000e+00 2.500000e+00 5.000000e+00 1.000000e+01 4.000000e-04
+[31] 8.000000e-04 1.600000e-03 3.200000e-03 6.400000e-03 1.280000e-02 2.560000e-02
+[37] 5.120000e-02 1.024000e-01
 
-3. Histograms, appart from telling us how the data is
+
+3. Histograms, apart from telling us how the data is
 distributed, can also make evident potential
 problems with the data. Plot a histogram
 of drug viabilities. Does it look as one would
 expect from the description of the data?
+
+Both range from about -12 to 4 on the x-axis, but the CCLE follows a uniform distribution whereas GDSC follows a normal distribution. /
+
 
 4. How many viability data points are within the
 expected range according to the definition of viability (e.g. above 0 
@@ -54,6 +129,17 @@ of variables are in the data? What does each column represent?
 
 6. Plot histograms of the viability scores at different levels of drug
 doses. Are stronger drug concentrations consistent with lower viability scores?
+
+Note: 
+Viability can be less than 0 
+```{r}
+negative_values <- subset(raw_data, raw_data$viability < 0) 
+negative_values
+hist(negative_values$)
+
+
+
+```
 
 ---
 
@@ -151,17 +237,208 @@ knitr::include_graphics("figures/reproducible.png")
 
 - What is classification?
 
+Using specific rules in order to create categories 
+
 - What are some statistical/machine learning methods people use for classification?
+
+Decision trees, regressions, glm
 
 #### Analysis
 
 1. Plot the distribution of the average drug response by AUC for GDSC and CCLE. 
 
+```{r}
+
+sum_data_NA <- na.omit(sum_data)
+
+average_response_CCLE <- aggregate(x = sum_data_NA$auc_CCLE, by = list(sum_data_NA$drug), FUN = mean)
+average_response_GDSC <- aggregate(x = sum_data_NA$auc_GDSC, by = list(sum_data_NA$drug), FUN = mean)
+average_response_CCLE
+average_response_GDSC
+
+average_response_s <- data.frame(average_response_CCLE$Group.1, average_response_CCLE$x, average_response_GDSC$x) 
+
+average_response_CCLE$study <- c("CCLE", "CCLE","CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE", "CCLE")
+average_response_GDSC$study <- c("GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC", "GDSC")
+
+average_response_L <- data.frame( drug = c(average_response_CCLE$Group.1, average_response_GDSC$Group.1), AUC = c(average_response_CCLE$x, average_response_GDSC$x), study = c(average_response_CCLE$study, average_response_GDSC$study))
+
+average_response_L %>%
+    ggplot(aes(x = AUC, group = study, fill = study, color = study)) +
+    geom_density(alpha = 1/4) +
+    xlim(0, 170) +
+    ggtitle("Distributions of viability scores by study")
+
+range(average_response_L$AUC)
+
+average_response_L
+average_response_s
+
+
+ggplot(average_response_L, aes(fill=as.factor(study), y=AUC, x=drug)) + geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+
+
 2. Classify each cell line as “resistant” or “sensitive” to a drug based on its AUC value by choosing a cutoff for which cell lines with AUC below the cutoff are considered resistant; code from Tutorial 2a may help. 
+
+```{r}
+
+#all resistant
+AUC_study1 <- rbeta(200, 1, 5)
+AUC_study2 <- rbeta(200, 1, 5)
+resistant <- data.frame(AUC_study1, AUC_study2)
+ggplot(resistant, aes(y = AUC_study2, x = AUC_study1)) +
+    geom_point() +
+    xlim(0, 1) +
+    ylim(0, 1) +
+    ggtitle("Simulated AUC of resistant cell lines")
+
+#half resistant, half sensitive 
+AUC_study1 <- c(rbeta(100, 1, 5), rbeta(100, 4, 2))
+AUC_study2 <- c(rbeta(100, 1, 5), rbeta(100, 4, 2))
+resistant <- data.frame(AUC_study1, AUC_study2, 
+                        CellLine = c(rep("Resistant", 100), rep("Sensitive", 100)))
+ggplot(resistant, aes(y = AUC_study2, x = AUC_study1, color = CellLine)) +
+    geom_point() +
+    xlim(0, 1) +
+    ylim(0, 1) +
+    ggtitle("Simulated AUC with half sensitive and half resistant cell lines")
+
+drugAvg <- sum_data %>% 
+              group_by(cellLine) %>%
+              summarise(mean_ic50_CCLE = mean(-log10(ic50_CCLE / 10^6)), 
+                        mean_ic50_GDSC = mean(-log10(ic50_GDSC / 10^6)),
+                        mean_auc_CCLE = mean(auc_CCLE),
+                        mean_auc_GDSC = mean(auc_GDSC)) 
+
+ggplot(drugAvg, aes(x = mean_ic50_GDSC, y = mean_ic50_CCLE)) +
+    geom_point(alpha = 0.6) +
+    ggtitle("Average IC50 value by cell line (averaged over drugs)")
+
+ggplot(drugAvg, aes(x = mean_auc_GDSC, y = mean_auc_CCLE)) +
+    geom_point(alpha = 0.6) +
+    ggtitle("Average AUC value by cell line (averaged over drugs)")
+
+sum_data <- sum_data %>% 
+              mutate(cutoff = ifelse(drug == "paclitaxel", 0.4, 0.1),
+                     sensitivity_GDSC = factor(ifelse( auc_GDSC < cutoff, "Resistant", "Sensitive")), 
+                     sensitivity_CCLE = factor(ifelse( auc_CCLE < cutoff, "Resistant", "Sensitive"))) 
+table("GDSC" = sum_data$sensitivity_GDSC,
+      "CCLE" = sum_data$sensitivity_CCLE)
+
+sum_data <-
+    sum_data %>% 
+    mutate(category = paste(sensitivity_GDSC, sensitivity_CCLE),
+           category = fct_recode(category,
+                                 "Both Resistant" = "Resistant Resistant",
+                                 "Both Sensitive" = "Sensitive Sensitive",
+                                 "GDSC Resistant / CCLE Sensitive" = "Resistant Sensitive",
+                                 "GDSC Sensitive / CCLE Resistant" = "Sensitive Resistant"))
+table(sum_data$category)
+sum_data %>%
+    subset(drug == "PLX4720") %>%
+    ggplot(aes(x = auc_GDSC, y = auc_CCLE, colour = category)) +
+    geom_point() + 
+    xlab("GDSC AUC") +
+    ylab("CCLE AUC") +
+    geom_hline(aes(yintercept = cutoff), colour="grey", alpha=0.75, lty=2) +
+    geom_vline(aes(xintercept = cutoff), colour="grey", alpha=0.75, lty=2) +
+    ggtitle("Drug PLX4720")
+
+ggplot(sum_data, aes(x = auc_GDSC, y = auc_CCLE, colour = category)) +
+    geom_point(cex = 0.5) + 
+    facet_wrap(~ drug) +
+    xlab("GDSC AUC") +
+    ylab("CCLE AUC") +
+    geom_hline(aes(yintercept = cutoff), colour = "grey", alpha = 0.75, lty = 2) +
+    geom_vline(aes(xintercept = cutoff), colour = "grey", alpha = 0.75, lty = 2) +
+    ggtitle("Cell line sensitivity classifications between studies")
+
+
+
+mcc <- function (study1, study2) {
+    BS <- sum(study1 == "Sensitive" & study2 == "Sensitive") 
+    BR <- sum(study1 == "Resistant" & study2 == "Resistant") 
+    SR <- sum(study1 == "Sensitive" & study2 == "Resistant") 
+    RS <- sum(study1 == "Resistant" & study2 == "Sensitive") 
+    
+    if (BS+SR == 0 | BS+RS == 0 | BR+SR == 0 |  BR+RS ==0){
+        mcc <- ((BS*BR)-(SR*RS)) 
+    }else{
+        mcc <- ((BS*BR)-(SR*RS)) / sqrt(exp((log(BS+SR)+log(BS+RS)+log(BR+SR)+log(BR+RS))))
+    }
+    return(mcc)
+}
+
+sum_data_na = na.omit(sum_data)
+
+drugCorrs <- sum_data_na %>% 
+    group_by(drug) %>% 
+    summarise(matthews_corr = mcc (sensitivity_GDSC, sensitivity_CCLE))
+drugCorrs
+
+drugCorrs
+sort(drugCorrs$matthews_corr, decreasing = TRUE)
+
+barplot(sort(drugCorrs$matthews_corr, decreasing = TRUE),
+main = "Matthews Correlation",
+ylab = "Drug",
+names.arg = drugCorrs$drug, cex.names = .7, 
+col = "darkred",
+horiz = FALSE, las=2) 
+
+
+
+
+```
+
 
 3. Compare your assigned resistance status of cell lines in GDSC and CCLE for each drug. How often do the two studies agree? 
 
 4. Experiment with varying your cutoff threshold and compare the assigned resistance status. Which cutoff shows the most agreement between studies? The least agreement? 
+
+```{r}
+
+agreements = data.frame()
+
+min_agg <- list()
+max_agg <- list()
+avg_agg <- list()
+
+agreement_threshhold <- function (cutoff1){
+  sum_data2 <- sum_data %>% 
+              mutate(cutoff = ifelse(drug == "paclitaxel", cutoff1, cutoff1),
+              sensitivity_GDSC = factor(ifelse( auc_GDSC < cutoff1, "Resistant", "Sensitive")), 
+              sensitivity_CCLE = factor(ifelse( auc_CCLE < cutoff1, "Resistant", "Sensitive"))) 
+              table("GDSC" = sum_data2$sensitivity_GDSC,
+              "CCLE" = sum_data2$sensitivity_CCLE)
+    
+
+  sum_data_na = na.omit(sum_data2)
+  
+  drugCorrs <- sum_data_na %>% 
+    group_by(drug) %>% 
+    summarise(matthews_corr = mcc (sensitivity_GDSC, sensitivity_CCLE))
+ 
+  drugCorrs
+#  return(min(drugCorrs$matthews_corr))
+  return(max(drugCorrs$matthews_corr))
+  #return(mean(drugCorrs$matthews_corr))
+  #sd(drugCorrs$matthews_corr)
+  }
+
+agreement_threshhold(1)
+
+
+min(drugCorrs$matthews_corr)
+max(drugCorrs$matthews_corr)
+mean(drugCorrs$matthews_corr)
+
+
+```
+
 
 
 ---
